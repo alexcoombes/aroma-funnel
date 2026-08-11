@@ -2,6 +2,7 @@
 "use strict";
 
 /* ---------------- constants ---------------- */
+const BUILD = "1.5.1";
 const INK = "#23261f", EUCA = "#3e7c59", OXIDE = "#a63a2b", LINE = "#d8d4c8", MUTE = "#6b6a5f";
 const JUNK = ["/apps/", "/password", "/cart", "/checkouts", "/orders", "/policies", "/account"];
 const INFO_PAGES = new Set(["/pages/ingredients", "/pages/stockists", "/pages/contact", "/pages/our-mission"]);
@@ -31,6 +32,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const shortPath = (p) => p === "/" ? "/ (homepage)" : p.length > 52 ? p.slice(0, 50) + "…" : p;
 
 function classify(path) {
+  if (!path || typeof path !== "string") return "Advertorial";
   if (path === "/") return "Homepage";
   if (path.startsWith("/products/")) return "PDP";
   if (path.startsWith("/collections")) return "Collection";
@@ -159,7 +161,8 @@ async function fetchData() {
     S.data = normalize(j);
     renderAll();
   } catch (e) {
-    $("error").textContent = "Data pull failed: " + e.message;
+    const at = e.stack ? String(e.stack).split("\n").find((l) => l.includes("app.js")) : "";
+    $("error").textContent = "Data pull failed: " + e.message + (at ? "  [" + at.trim().slice(0, 80) + "]" : "");
     $("error").style.display = "block";
   } finally {
     btn.disabled = false; btn.textContent = "Refresh data";
@@ -536,7 +539,7 @@ function renderAll() {
   invalidateStats();
   $("stamp").textContent =
     `${d.range.start} → ${d.range.end} (${d.range.days}d) · pulled ${d.fetchedAt.replace("T", " ")}` +
-    (d.mock ? " · DEMO DATA" : "");
+    (d.mock ? " · DEMO DATA" : "") + " · build " + BUILD;
   $("dash-loading").style.display = "none";
   $("dash-body").style.display = "block";
   renderDashboard(); renderPages(); renderSensitivity(); renderUnlocks(); renderBenchmarks();
