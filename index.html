@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aroma Armour — Funnel Control</title>
+<meta name="shopify-api-key" content="__SHOPIFY_CLIENT_ID__">
+<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+<link rel="stylesheet" href="static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="band">
+  <div class="row">
+    <div class="brand">
+      <img src="static/logo-bone.png" alt="Aroma Armor" class="brand-logo">
+      <div class="brand-sub">FUNNEL CONTROL</div>
+    </div>
+    <div class="stamp" id="stamp">loading…</div>
+  </div>
+  <nav id="nav">
+    <button data-page="dashboard" class="active">Dashboard</button>
+    <button data-page="pages">Pages</button>
+    <button data-page="sensitivity">Sensitivity</button>
+    <button data-page="benchmarks">Benchmarks</button>
+    <button data-page="unlocks">Unlocks</button>
+    <button data-page="daily">Daily Data</button>
+    <button data-page="levers">Lever Log</button>
+    <button data-page="limits">Model Limits</button>
+    <button data-page="glossary">Glossary</button>
+  </nav>
+</div>
+
+<div class="controls">
+  <button class="chip" data-days="30">Last 30 days</button>
+  <button class="chip" data-days="60">Last 60 days</button>
+  <button class="chip" data-days="100">Last 100 days</button>
+  <input type="date" id="custom-start" title="Custom start">
+  <span style="color:var(--mute)">→</span>
+  <input type="date" id="custom-end" title="Custom end">
+  <button class="chip" id="apply-custom">Apply custom</button>
+  <button class="btn-refresh" id="refresh">Refresh data</button>
+</div>
+<div class="error" id="error" style="display:none"></div>
+
+<main>
+  <section class="page active" id="page-dashboard">
+    <div class="loading" id="dash-loading">Pulling live data from Shopify…</div>
+    <div id="dash-body" style="display:none">
+      <div class="grid-kpi" id="kpi-strip"></div>
+      <div class="card">
+        <h2>Daily sessions &amp; conversion — lever pulls flagged</h2>
+        <canvas id="trend-chart" height="110"></canvas>
+      </div>
+      <div class="card top5-card">
+        <h2>Top 10 revenue unlocks — prize × distance off benchmark</h2>
+        <div class="center-wrap"><table id="top10-unlocks" class="fit"></table></div>
+      </div>
+      <div class="card">
+        <h2>Funnel — selected range vs prior period of equal length</h2>
+        <div class="scroll-x"><table id="glance"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="page-pages">
+    <div class="card">
+      <h2>Landing pages — full-journey credit to the entry page</h2>
+      <div class="scroll-x"><table id="pages-table"></table></div>
+      <div class="sub">Click headers to sort. Bounce >85% flagged. Est. revenue = completed × range AOV. Cart→Chk can exceed 100% via Buy Now. Pages under ~300 sessions are noisy.</div>
+    </div>
+  </section>
+
+  <section class="page" id="page-sensitivity">
+    <div class="card">
+      <h2>Single-lever revenue sensitivity</h2>
+      <div class="slider-row">
+        Move: <input type="range" id="sens-slider" min="-100" max="100" value="5">
+        <span class="pct" id="sens-pct">+5%</span>
+        <label style="color:var(--mute);font-size:12px">custom:
+          <input type="number" id="sens-custom" step="any" placeholder="e.g. 1000" style="width:90px;border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-family:var(--mono)"> %
+        </label>
+      </div>
+      <div class="rank-note" id="sens-note"></div>
+      <div class="scroll-x"><table id="sens-site"></table></div>
+      <div style="height:14px"></div>
+      <div class="scroll-x"><table id="sens-table"></table></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-benchmarks">
+    <div class="card">
+      <h2>Benchmarks by page type — set your own targets</h2>
+      <div class="rank-note">Grey = pooled actuals for the range. Enter a % to set your own benchmark (blank = pooled). Saved to benchmarks.json and used everywhere benchmarks appear.</div>
+      <div class="scroll-x"><table id="bench-editor"></table></div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:12px">
+        <button class="btn-add" id="bench-save">Save benchmarks</button>
+        <span id="bench-status" style="font-size:12px;color:var(--euca)"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Every page vs its type benchmark</h2>
+      <div class="scroll-x"><table id="bench-pages"></table></div>
+      <div class="sub">Green = better than benchmark, red = worse (bounce: lower is better). Uplift $/mo = Page→Cart raised to benchmark, benchmark downstream rates.</div>
+    </div>
+  </section>
+
+  <section class="page" id="page-unlocks">
+    <div class="card">
+      <h2>Revenue unlocks — every gap to benchmark, priced and weighted</h2>
+      <div class="rank-note">One row per page × lever sitting below its benchmark. Unlock Δ = revenue from closing the stat fully to benchmark (everything else held constant); ease = how far off benchmark it sits (0–100%); score = Δ × ease, so bigger gaps rank higher twice over — they're worth more AND assumed cheaper to move. Benchmarks: manual > external default > pooled. Caveats: Model Limits.</div>
+      <div class="scroll-x"><table id="unlocks-table"></table></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-daily">
+    <div class="card">
+      <h2>Daily revenue</h2>
+      <canvas id="rev-chart" height="100"></canvas>
+    </div>
+    <div class="card">
+      <h2>Daily data — selected range</h2>
+      <div class="scroll-x"><table id="daily-table"></table></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-levers">
+    <div class="two-col">
+      <div class="card">
+        <h2>Log a lever pull</h2>
+        <div class="marker-form">
+          <input type="date" id="m-date">
+          <input type="text" id="m-label" placeholder="Lever pulled (e.g. reactivated popup)">
+          <div class="chips-mini" id="m-chips"></div>
+          <input type="text" id="m-note" placeholder="Note (optional)">
+          <button class="btn-add" id="m-add">Add marker</button>
+        </div>
+        <div class="sub">Saved to markers.json; drawn as flags on the Dashboard trend chart.</div>
+      </div>
+      <div class="card">
+        <h2>Logged levers</h2>
+        <div id="m-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="page-limits">
+    <div class="card glossary" id="limits-body"></div>
+  </section>
+
+  <section class="page" id="page-glossary">
+    <div class="card glossary" id="glossary-body"></div>
+  </section>
+</main>
+
+<script src="static/app.js"></script>
+</body>
+</html>
