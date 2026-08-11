@@ -54,12 +54,37 @@ const SHOW_COLS = "sessions, bounce_rate, sessions_with_cart_additions, sessions
 const META_NS = "$app:funnel";
 let _shopId = null;
 
+function embedCheck() { // diagnose the environment before blaming the data
+  if (window.top === window.self)
+    return "This page isn't embedded in Shopify. Open it from Shopify admin → Apps → Aroma Funnel Control — Direct API only authenticates inside the admin.";
+  const key = document.querySelector('meta[name="shopify-api-key"]');
+  if (!key || !key.content || key.content.startsWith("__"))
+    return "The Client ID hasn't been set: edit index.html on GitHub and replace __SHOPIFY_CLIENT_ID__ with your app's Client ID from dev.shopify.com.";
+  if (typeof shopify === "undefined" && !window.shopify)
+    return "Shopify App Bridge didn't load — check that the app-bridge.js script tag is intact in index.html and hard-refresh (Ctrl+Shift+R).";
+  return null;
+}
+
 async function gqlDirect(query, variables) {
-  const res = await fetch(API_URL, { method: "POST", body: JSON.stringify({ query, variables }) });
+  let res;
+  try {
+    res = await fetch(API_URL, { method: "POST", body: JSON.stringify({ query, variables }) });
+  } catch (e) {
+    throw new Error(embedCheck() ||
+      "Direct API request was rejected. Most likely the app version with Direct API access isn't live: rerun deploy-config.bat to a 'new version released' message, refresh the install at dev.shopify.com → Installs, then hard-refresh this page.");
+  }
   const j = await res.json();
   if (j.errors && j.errors.length) throw new Error(j.errors[0].message || "GraphQL error");
   return j.data;
 }
+
+const numVal = (v) => { // tolerant of formatted values ("53,158", "$1,245.50", "78.74%")
+  if (v == null) return NaN;
+  if (typeof v === "number") return v;
+  const s = String(v).trim();
+  const n = parseFloat(s.replace(/[^0-9.eE+-]/g, ""));
+  return s.endsWith("%") ? n / 100 : n;
+};
 
 const canonCol = (s) => String(s).replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
@@ -145,32 +170,36 @@ function normalize(j) {
   const pi = colIdx(j.pages);
   const pages = j.pages.rows.map((r) => ({
     path: r[pi.landing_page_path],
-    type: classify(r[pi.landing_page_path]),
-    sessions: +r[pi.sessions], bounce: +r[pi.bounce_rate],
-    carts: +r[pi.sessions_with_cart_additions],
-    reached: +r[pi.sessions_that_reached_checkout],
-    completed: +r[pi.sessions_that_completed_checkout],
-  })).filter((p) => !JUNK.some((x) => p.path.startsWith(x)));
+    type: classify(r[pi.landing_page_path] || ""),
+    sessions: numVal(r[pi.sessions]), bounce: numVal(r[pi.bounce_rate]),
+    carts: numVal(r[pi.sessions_with_cart_additions]),
+    reached: numVal(r[pi.sessions_that_reached_checkout]),
+    completed: numVal(r[pi.sessions_that_completed_checkout]),
+  })).filter((p) => p.path && typeof p.path === "string" && isFinite(p.sessions) && !JUNK.some((x) => p.path.startsWith(x)));
+  if (!pages.length && j.pages.rows.length) {
+    throw new Error("Pages data came back in an unexpected shape — first row: " + JSON.stringify(j.pages.rows[0]).slice(0, 220) + " | columns: " + j.pages.columns.join(", "));
+  }
 
   const ri = colIdx(j.referrers);
   const refs = {};
   j.referrers.rows.forEach((r) => {
-    const p = r[ri.landing_page_path], src = r[ri.referrer_source], v = +r[ri.sessions];
+    const p = r[ri.landing_page_path], src = r[ri.referrer_source], v = numVal(r[ri.sessions]);
+    if (!p || !isFinite(v)) return;
     (refs[p] = refs[p] || {})[src] = (refs[p][src] || 0) + v;
   });
 
   const di = colIdx(j.daily);
   const dailyAll = j.daily.rows.map((r) => ({
-    day: r[di.day], sessions: +r[di.sessions], bounce: +r[di.bounce_rate],
-    carts: +r[di.sessions_with_cart_additions],
-    reached: +r[di.sessions_that_reached_checkout],
-    completed: +r[di.sessions_that_completed_checkout],
-  })).sort((a, b) => a.day.localeCompare(b.day));
+    day: String(r[di.day]).slice(0, 10), sessions: numVal(r[di.sessions]), bounce: numVal(r[di.bounce_rate]),
+    carts: numVal(r[di.sessions_with_cart_additions]),
+    reached: numVal(r[di.sessions_that_reached_checkout]),
+    completed: numVal(r[di.sessions_that_completed_checkout]),
+  })).filter((d) => isFinite(d.sessions)).sort((a, b) => a.day.localeCompare(b.day));
 
   const si = colIdx(j.sales_daily);
   const salesAll = j.sales_daily.rows.map((r) => ({
-    day: r[si.day], orders: +r[si.orders], total: +r[si.total_sales], net: +r[si.net_sales],
-  })).sort((a, b) => a.day.localeCompare(b.day));
+    day: String(r[si.day]).slice(0, 10), orders: numVal(r[si.orders]), total: numVal(r[si.total_sales]), net: numVal(r[si.net_sales]),
+  })).filter((d) => isFinite(d.orders)).sort((a, b) => a.day.localeCompare(b.day));
 
   const inCur = (d) => d.day >= j.range.start;
   return {
