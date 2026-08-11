@@ -2,7 +2,7 @@
 "use strict";
 
 /* ---------------- constants ---------------- */
-const BUILD = "1.5.1";
+const BUILD = "1.5.2";
 const INK = "#23261f", EUCA = "#3e7c59", OXIDE = "#a63a2b", LINE = "#d8d4c8", MUTE = "#6b6a5f";
 const JUNK = ["/apps/", "/password", "/cart", "/checkouts", "/orders", "/policies", "/account"];
 const INFO_PAGES = new Set(["/pages/ingredients", "/pages/stockists", "/pages/contact", "/pages/our-mission"]);
@@ -96,10 +96,14 @@ async function runShopifyQL(q, table, needed) {
   if (!out) throw new Error("shopifyqlQuery returned nothing — is the read_reports scope granted?");
   if (out.parseErrors && out.parseErrors.length) throw new Error("ShopifyQL: " + out.parseErrors.join("; "));
   if (!out.tableData || !out.tableData.columns) throw new Error(table + " query returned no tableData");
-  const cols = out.tableData.columns.map((c) => canonCol(c.name));
+  const rawNames = out.tableData.columns.map((c) => c.name);
+  const cols = rawNames.map(canonCol);
   const missing = needed.filter((k) => !cols.includes(k));
   if (missing.length) throw new Error(`${table} query: missing column(s) ${missing.join(", ")} — API returned: ${cols.join(", ")}`);
-  return { columns: cols, rows: out.tableData.rows || [] };
+  // Direct API returns each row as an OBJECT keyed by column name (values as
+  // strings); the old server returned positional arrays. Accept both.
+  const rows = (out.tableData.rows || []).map((r) => Array.isArray(r) ? r : rawNames.map((n) => r[n]));
+  return { columns: cols, rows };
 }
 
 async function pullFunnelData(start, end) {
