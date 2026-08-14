@@ -2,7 +2,7 @@
 "use strict";
 
 /* ---------------- constants ---------------- */
-const BUILD = "1.5.3";
+const BUILD = "1.5.4";
 const INK = "#23261f", EUCA = "#3e7c59", OXIDE = "#a63a2b", LINE = "#d8d4c8", MUTE = "#6b6a5f";
 const JUNK = ["/apps/", "/password", "/cart", "/checkouts", "/orders", "/policies", "/account"];
 const INFO_PAGES = new Set(["/pages/ingredients", "/pages/stockists", "/pages/contact", "/pages/our-mission"]);
@@ -600,13 +600,13 @@ function renderDashboard() {
   const top = unlockRows().slice(0, 10);
   $("top10-unlocks").innerHTML =
     `<colgroup><col style="width:5%"><col style="width:27%"><col style="width:22%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:13%"></colgroup>` +
-    `<tr><th>#</th><th style="text-align:left">Page</th><th style="text-align:left">Lever</th><th>Current</th><th>Benchmark</th><th>Off benchmark</th><th>Unlock Δ</th></tr>` +
+    `<tr><th>#</th><th style="text-align:left">Page</th><th style="text-align:left">Lever</th><th>Current</th><th>Benchmark</th><th>Gap (pp)</th><th>Unlock Δ</th></tr>` +
     top.map((r, i) =>
       `<tr><td>${i + 1}</td><td class="path" title="${esc(r.p.path)}">${esc(shortPath(r.p.path))}</td>` +
       `<td style="text-align:left;font-family:var(--disp)">${r.label}</td>` +
       `<td style="color:var(--oxide);font-weight:600">${r.f(r.cur)}</td>` +
       `<td style="color:var(--mute)">${r.f(r.bench)}</td>` +
-      `<td>${fmtPct(r.ease, 0)}</td><td style="font-weight:600">${fmtM(r.delta)}</td></tr>`).join("");
+      `<td>${(r.gap * 100).toFixed(1)}</td><td style="font-weight:600">${fmtM(r.delta)}</td></tr>`).join("");
 
   // funnel: selected range vs prior
   const rows = [
